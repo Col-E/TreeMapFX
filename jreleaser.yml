@@ -1,0 +1,52 @@
+project:
+  name: treemap-fx
+  description: A simple TreeMap chart control for JavaFX.
+  longDescription: A simple TreeMap chart control using the squarifying algorithm for JavaFX.
+  links:
+    homepage: https://github.com/Col-E/TreeMapFX
+  authors:
+    - Matt Coley
+  license: MIT
+  inceptionYear: 2023
+  stereotype: none
+  java:
+    version: 17
+    groupId: software.coley
+    artifactId: treemap-fx
+
+release:
+  github:
+    overwrite: true
+    tagName: '{{projectVersion}}'
+    changelog:
+      formatted: ALWAYS
+      preset: conventional-commits
+      contributors:
+        format: '- {{contributorName}}{{#contributorUsernameAsLink}} ({{.}}){{/contributorUsernameAsLink}}'
+
+distributions:
+  dist:
+    type: SINGLE_JAR
+    artifacts:
+      - path: target/{{projectName}}-{{projectVersion}}.jar
+
+signing:
+  active: RELEASE
+  mode: MEMORY
+  armored: true
+  verify: true
+  artifacts: true
+  checksums: true
+  files: false
+
+deploy:
+  maven:
+    nexus2:
+      maven-central:
+        active: RELEASE
+        url: https://s01.oss.sonatype.org/service/local
+        applyMavenCentralRules: true
+        stagingRepositories:
+          - target/staging-deploy
+        closeRepository: true
+        releaseRepository: true
