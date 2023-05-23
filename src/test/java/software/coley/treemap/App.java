@@ -45,6 +45,18 @@ public class App extends Application {
 		// Add the values to the tree-map
 		pane.addChildren(values);
 
+		// Show that properties can be changed on the fly without issues
+		demoPropertyChangesOnInterval(pane);
+
+		// Create basic layout and show it
+		BorderPane root = new BorderPane(pane);
+		root.setStyle("-fx-background-color: black");
+		Scene scene = new Scene(root, WIDTH, HEIGHT);
+		stage.setScene(scene);
+		stage.show();
+	}
+
+	private static void demoPropertyChangesOnInterval(TreeMapPane<String> pane) {
 		ScheduledExecutorService pool = Executors.newScheduledThreadPool(1);
 		pool.schedule(() -> {
 			pane.nodeFunctionProperty().set(text -> {
@@ -55,7 +67,6 @@ public class App extends Application {
 				return label;
 			});
 		}, 10, TimeUnit.SECONDS);
-
 		pool.schedule(() -> {
 			pane.nodeFunctionProperty().set(text -> {
 				Label label = new Label(text);
@@ -65,24 +76,7 @@ public class App extends Application {
 				return label;
 			});
 		}, 15, TimeUnit.SECONDS);
-
-		pool.schedule(() -> {
-			pane.sizeFunctionProperty().set(text -> {
-				return Integer.parseInt(text) % 40;
-			});
-		}, 20, TimeUnit.SECONDS);
-
-		pool.schedule(() -> {
-			pane.sizeFunctionProperty().set(text -> {
-				return Integer.parseInt(text) % 15;
-			});
-		}, 25, TimeUnit.SECONDS);
-
-		// Create basic layout and show it
-		BorderPane root = new BorderPane(pane);
-		root.setStyle("-fx-background-color: black");
-		Scene scene = new Scene(root, WIDTH, HEIGHT);
-		stage.setScene(scene);
-		stage.show();
+		pool.schedule(() -> pane.sizeFunctionProperty().set(text -> Integer.parseInt(text) % 40), 20, TimeUnit.SECONDS);
+		pool.schedule(() -> pane.sizeFunctionProperty().set(text -> Integer.parseInt(text) % 15), 25, TimeUnit.SECONDS);
 	}
 }
