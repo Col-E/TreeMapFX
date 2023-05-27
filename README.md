@@ -53,7 +53,7 @@ public class App extends Application {
         });
         
         // Add the values to the tree-map
-        pane.addChildren(values);
+        pane.valueListProperty().addAll(values);
         
         // Create basic layout and show it
         BorderPane root = new BorderPane(pane);
@@ -65,7 +65,12 @@ public class App extends Application {
 }
 ```
 
-The `TreeMapPane` has two properties that are set in the constructor, but can also be configured on the fly:
+The `TreeMapPane` has two properties that are set in the constructor that determine how content is rendered, 
+but can also be configured on the fly:
 
-- `ObjectProperty<Function<T, Node>> nodeFunctionProperty()`
+- `ObjectProperty<Function<T, Node>> nodeFactoryProperty()`
 - `ObjectProperty<ToDoubleFunction<T>> sizeFunctionProperty()`
+
+The items shown in the `TreeMapPane` are also represented as a property:
+
+- `ListProperty<T> valueListProperty()`

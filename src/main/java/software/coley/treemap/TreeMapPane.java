@@ -1,11 +1,14 @@
 package software.coley.treemap;
 
 import javafx.application.Platform;
-import javafx.beans.property.ObjectProperty;
-import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.Observable;
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.ObjectBinding;
+import javafx.beans.property.*;
 import javafx.collections.FXCollections;
-import javafx.collections.ListChangeListener;
+import javafx.collections.MapChangeListener;
 import javafx.collections.ObservableList;
+import javafx.collections.ObservableMap;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.VPos;
@@ -15,13 +18,27 @@ import software.coley.treemap.squaring.Rectangle;
 import software.coley.treemap.squaring.Squarify;
 
 import javax.annotation.Nonnull;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
+import java.util.stream.Collectors;
 
 /**
  * Tree map pane to render weighted values in different sized rectangles.
+ * <p>
+ * To add content to the pane, you need to provide two things:
+ * <ol>
+ *     <li>{@link #sizeFunctionProperty() A conversion of 'T' to double} for calculating 'T' items "value"</li>
+ *     <li>{@link #nodeFactoryProperty() A conversion of 'T' to nodes} for visualizing 'T' items</li>
+ * </ol>
+ * The nodes supplied by the node factory are sized according to their "value" relative to all other items.
+ * More valuable items are given larger nodes.
+ * <p>
+ * Should you wish to change the {@link #sizeFunctionProperty()} or {@link #nodeFactoryProperty()} you must do so
+ * on {@link Platform#runLater(Runnable) the FX thread}.
  *
  * @param <T>
  * 		Type of content.
@@ -29,41 +46,99 @@ import java.util.function.ToDoubleFunction;
  * @author Matt Coley
  */
 public class TreeMapPane<T> extends Pane {
-	protected final ObservableList<T> valueList = FXCollections.observableArrayList();
-	protected final Map<T, Node> valueToNode = new IdentityHashMap<>();
-	protected final ObjectProperty<ToDoubleFunction<T>> sizeFunctionProperty;
-	protected final ObjectProperty<Function<T, Node>> nodeFunctionProperty;
-	protected final AtomicBoolean layoutLock = new AtomicBoolean();
+	// Managed properties
+	protected final MapProperty<T, Node> valueToNode = new SimpleMapProperty<>();
+
+	// Configurable properties
+	protected final ListProperty<T> valueList = new SimpleListProperty<>(FXCollections.observableArrayList());
+	protected final ObjectProperty<ToDoubleFunction<T>> sizeFunction;
+	protected final ObjectProperty<Function<T, Node>> nodeFactory;
 
 	/**
 	 * New tree-map pane.
 	 *
 	 * @param sizeFunction
 	 * 		Size computation function for {@code T} values.
-	 * @param nodeFunction
+	 * @param nodeFactory
 	 * 		Node providing function for {@code T} values.
 	 */
 	public TreeMapPane(@Nonnull ToDoubleFunction<T> sizeFunction,
-					   @Nonnull Function<T, Node> nodeFunction) {
-		this.sizeFunctionProperty = new SimpleObjectProperty<>(sizeFunction);
-		this.nodeFunctionProperty = new SimpleObjectProperty<>(nodeFunction);
+					   @Nonnull Function<T, Node> nodeFactory) {
+
+		this.sizeFunction = new SimpleObjectProperty<>(sizeFunction);
+		this.nodeFactory = new SimpleObjectProperty<>(nodeFactory);
+
+		// Create a dummy binding that will fire off a change when any given property is changed.
+		ObjectBinding<?> multiSourceBindings = Bindings.createObjectBinding(
+				() -> this /* Dummy value must not be null */,
+				getTreeMapProperties());
+		setupChangeBindings(multiSourceBindings);
 
 		// Disabled to prevent pixel snapping flickering.
 		setSnapToPixel(false);
+	}
 
-		// Add listeners to create or remove nodes on/from the pane.
-		setupChildrenUpdates();
+	/**
+	 * Configures UI updates through bindings.
+	 *
+	 * @param multiSourceBindings
+	 * 		Binding that wraps properties of this pane.
+	 * 		Any change in one property is forwarded to this wrapper property.
+	 */
+	protected void setupChangeBindings(@Nonnull ObjectBinding<?> multiSourceBindings) {
+		// When any of the properties change, recompute the nodes displayed.
+		valueToNode.bind(multiSourceBindings.map(unused -> {
+			Function<T, Node> valueFunction = nodeFactory.get();
+			Function<T, T> keyFunction = Function.identity();
+			BinaryOperator<Node> mergeFunction = (a, b) -> {
+				throw new IllegalStateException();
+			};
+			Map<T, Node> map = valueList.stream()
+					.collect(Collectors.toMap(keyFunction,
+							valueFunction,
+							mergeFunction,
+							IdentityHashMap::new));
+			return FXCollections.observableMap(map);
+		}));
 
-		// Clear data when properties change
-		setupPropertyListeners();
+		// Map updates should update the children present on the pane.
+		valueToNode.addListener((MapChangeListener<T, Node>) change -> {
+			ObservableList<Node> children = getChildren();
+			if (change.wasAdded()) children.add(change.getValueAdded());
+			if (change.wasRemoved()) children.remove(change.getValueRemoved());
+		});
+	}
+
+	/**
+	 * @return Array of properties to consider for triggering recalculation of the tree-map display.
+	 */
+	@Nonnull
+	protected Observable[] getTreeMapProperties() {
+		return new Observable[]{sizeFunction, nodeFactory, valueList};
+	}
+
+	/**
+	 * @return Property representing the items to display as a tree-map.
+	 */
+	@Nonnull
+	public ListProperty<T> valueListProperty() {
+		return valueList;
+	}
+
+	/**
+	 * @return Read-only managed map of value instances to their associated {@link Node} representations.
+	 */
+	@Nonnull
+	public ObservableMap<T, Node> valueToNodeProperty() {
+		return FXCollections.unmodifiableObservableMap(valueToNode);
 	}
 
 	/**
 	 * @return Property representing the current {@code T} to {@link Node} mapping function.
 	 */
 	@Nonnull
-	public ObjectProperty<Function<T, Node>> nodeFunctionProperty() {
-		return nodeFunctionProperty;
+	public ObjectProperty<Function<T, Node>> nodeFactoryProperty() {
+		return nodeFactory;
 	}
 
 	/**
@@ -71,141 +146,7 @@ public class TreeMapPane<T> extends Pane {
 	 */
 	@Nonnull
 	public ObjectProperty<ToDoubleFunction<T>> sizeFunctionProperty() {
-		return sizeFunctionProperty;
-	}
-
-	/**
-	 * Configures a change listener on the backing value list that adds/removed children to/from the pane.
-	 */
-	protected void setupChildrenUpdates() {
-		valueList.addListener((ListChangeListener<T>) change -> {
-			// Extract added & removed children from the changes
-			List<Node> addedChildren = null;
-			List<Node> removedChildren = null;
-			Function<T, Node> nodeFunction = nodeFunctionProperty.get();
-			while (change.next()) {
-				for (T value : change.getAddedSubList()) {
-					Node node = nodeFunction.apply(value);
-					if (node == null)
-						throw new IllegalStateException("Node function must not provide null values, " +
-								"null provided for: " + value);
-					valueToNode.put(value, node);
-					if (addedChildren == null)
-						addedChildren = new ArrayList<>();
-					addedChildren.add(node);
-				}
-				for (T value : change.getRemoved()) {
-					Node node = valueToNode.remove(value);
-					if (node == null)
-						throw new IllegalStateException("No associated node for the value: " + value);
-					if (removedChildren == null)
-						removedChildren = new ArrayList<>();
-					removedChildren.add(node);
-				}
-			}
-
-			// Update children
-			ObservableList<Node> children = getChildren();
-			if (removedChildren != null) children.removeAll(removedChildren);
-			if (addedChildren != null) children.addAll(addedChildren);
-		});
-	}
-
-	/**
-	 * Configures change listeners on properties to update appropriate internals and children layouts.
-	 */
-	protected void setupPropertyListeners() {
-		// Handle replacing the node cache when the node function is replaced.
-		nodeFunctionProperty.addListener((ob, old, cur) -> {
-			// Lock layouts until we've updated the value-to-node map.
-			// We don't want a layout to occur while a value has no associated node.
-			layoutLock.set(true);
-
-			// Create new children and update the value-to-node map.
-			valueToNode.clear();
-			for (T value : valueList)
-				valueToNode.put(value, cur.apply(value));
-
-			// We can unlock layouts now.
-			layoutLock.set(false);
-
-			// Schedule update to children list, replace old nodes with newly made ones.
-			Platform.runLater(() -> {
-				ObservableList<Node> children = getChildren();
-				children.clear();
-				children.addAll(valueToNode.values());
-			});
-
-			// Request layout to display the new children.
-			requestLayout();
-		});
-
-		// Request a layout refresh when the size function changes.
-		sizeFunctionProperty.addListener((ob, old, cur) -> {
-			requestLayout();
-		});
-	}
-
-	/**
-	 * @param value
-	 * 		Value to add.
-	 *
-	 * @return {@code true} when added.
-	 */
-	public boolean addChild(@Nonnull T value) {
-		return valueList.add(value);
-	}
-
-	/**
-	 * @param values
-	 * 		Values to add.
-	 *
-	 * @return {@code true} when added.
-	 */
-	@SafeVarargs
-	public final boolean addChildren(@Nonnull T... values) {
-		return valueList.addAll(values);
-	}
-
-	/**
-	 * @param values
-	 * 		Values to add.
-	 *
-	 * @return {@code true} when added.
-	 */
-	public boolean addChildren(@Nonnull Collection<T> values) {
-		return valueList.addAll(values);
-	}
-
-	/**
-	 * @param value
-	 * 		Value to remove.
-	 *
-	 * @return {@code true} when removed.
-	 */
-	public boolean removeChild(@Nonnull T value) {
-		return valueList.remove(value);
-	}
-
-	/**
-	 * @param values
-	 * 		Values to remove.
-	 *
-	 * @return {@code true} when removed.
-	 */
-	@SafeVarargs
-	public final boolean removeChildren(@Nonnull T... values) {
-		return valueList.removeAll(values);
-	}
-
-	/**
-	 * @param values
-	 * 		Values to remove.
-	 *
-	 * @return {@code true} when removed.
-	 */
-	public boolean removeChildren(@Nonnull Collection<T> values) {
-		return valueList.removeAll(values);
+		return sizeFunction;
 	}
 
 	/**
@@ -223,17 +164,13 @@ public class TreeMapPane<T> extends Pane {
 	@Nonnull
 	protected List<Rectangle<T>> computeRectangles(double canvasX, double canvasY,
 												   double canvasWidth, double canvasHeight) {
-		ToDoubleFunction<T> sizeFunction = sizeFunctionProperty.get();
-		return new Squarify<>(valueList, sizeFunction, canvasX, canvasY, canvasWidth, canvasHeight)
+		return new Squarify<>(valueListProperty().get(), sizeFunctionProperty().get(),
+				canvasX, canvasY, canvasWidth, canvasHeight)
 				.getRectangles();
 	}
 
 	@Override
 	protected void layoutChildren() {
-		// Skip if layout lock is set.
-		if (layoutLock.get())
-			return;
-
 		// Get dimensions to pass to the squarify algorithm from the current pane dimensions, minus insets.
 		Insets insets = getInsets();
 		double canvasX = insets.getLeft();
@@ -249,6 +186,7 @@ public class TreeMapPane<T> extends Pane {
 		List<Rectangle<T>> rectangles = computeRectangles(canvasX, canvasY, canvasWidth, canvasHeight);
 
 		// Get the associated node for each rectangle's value and update its position/size.
+		Map<T, Node> valueToNode = valueToNodeProperty();
 		for (Rectangle<T> rectangle : rectangles) {
 			T value = rectangle.data();
 			Node node = valueToNode.get(value);

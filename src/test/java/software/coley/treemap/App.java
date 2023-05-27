@@ -1,6 +1,7 @@
 package software.coley.treemap;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
@@ -43,7 +44,7 @@ public class App extends Application {
 		});
 
 		// Add the values to the tree-map
-		pane.addChildren(values);
+		pane.valueListProperty().addAll(values);
 
 		// Show that properties can be changed on the fly without issues
 		demoPropertyChangesOnInterval(pane);
@@ -58,25 +59,37 @@ public class App extends Application {
 
 	private static void demoPropertyChangesOnInterval(TreeMapPane<String> pane) {
 		ScheduledExecutorService pool = Executors.newScheduledThreadPool(1);
-		pool.schedule(() -> {
-			pane.nodeFunctionProperty().set(text -> {
+		int interval = 5;
+		int seconds = interval;
+		runScheduledFx(pool, seconds += interval, () -> {
+			pane.nodeFactoryProperty().set(text -> {
 				Label label = new Label(text);
 				label.setStyle("-fx-background-color: " + String.format("#%06x", r.nextInt(0xffffff + 1)) + "; " +
 						"-fx-background-radius: 20; -fx-border-width: 0.5; -fx-border-color: black;");
 				label.setAlignment(Pos.CENTER);
 				return label;
 			});
-		}, 10, TimeUnit.SECONDS);
-		pool.schedule(() -> {
-			pane.nodeFunctionProperty().set(text -> {
+		});
+		runScheduledFx(pool, seconds += interval, () -> {
+			pane.nodeFactoryProperty().set(text -> {
 				Label label = new Label(text);
 				label.setStyle("-fx-background-color: " + String.format("#%06x", r.nextInt(0xffffff + 1)) + "; " +
 						"-fx-background-radius: 0; -fx-border-width: 3; -fx-border-color: black;");
 				label.setAlignment(Pos.CENTER);
 				return label;
 			});
-		}, 15, TimeUnit.SECONDS);
-		pool.schedule(() -> pane.sizeFunctionProperty().set(text -> Integer.parseInt(text) % 40), 20, TimeUnit.SECONDS);
-		pool.schedule(() -> pane.sizeFunctionProperty().set(text -> Integer.parseInt(text) % 15), 25, TimeUnit.SECONDS);
+		});
+		runScheduledFx(pool, seconds += interval, () -> {
+			pane.sizeFunctionProperty().set(text -> Integer.parseInt(text) % 40);
+		});
+		runScheduledFx(pool, seconds += interval, () -> {
+			pane.sizeFunctionProperty().set(text -> Integer.parseInt(text) % 15);
+		});
+	}
+
+	private static void runScheduledFx(ScheduledExecutorService service, int i, Runnable r) {
+		service.schedule(() -> {
+			Platform.runLater(r);
+		}, i, TimeUnit.SECONDS);
 	}
 }
