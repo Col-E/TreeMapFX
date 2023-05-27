@@ -65,6 +65,58 @@ public class App extends Application {
 }
 ```
 
+Hierarchical example:
+```java
+public class DemoHierarchicalContent extends Application {
+    private static final int WIDTH = 300;
+    private static final int HEIGHT = 200;
+
+    @Override
+    public void start(Stage stage) {
+		// Model the 'src' directory as hierarchal data (directory/file sizes)
+        Path src = Paths.get("src");
+        TreeMapPane<TreeContent> pane = TreeMapPane.forTreeContent();
+        pane.valueListProperty().addAll(hierarchyFromPath(src));
+
+        // Create basic layout and show it
+        BorderPane root = new BorderPane(pane);
+        root.setStyle("-fx-background-color: black");
+        Scene scene = new Scene(root, WIDTH, HEIGHT);
+        stage.setScene(scene);
+        stage.show();
+    }
+
+    @Nonnull
+    private List<TreeContent> hierarchyFromPath(@Nonnull Path path) {
+        try {
+            if (Files.isDirectory(path)) {
+                ListProperty<TreeContent> children = new SimpleListProperty<>(observableArrayList(Files.list(path)
+                        .flatMap(p -> hierarchyFromPath(p).stream())
+                        .toList()));
+                return Collections.singletonList(new SimpleHierarchicalTreeContent(children));
+            } else {
+                long size = Files.size(path);
+                Label label = createLabel(path.getFileName().toString(), path.getParent(), size);
+                return Collections.singletonList(new TreeContent() {
+                    @Override
+                    public double getValueWeight() {
+                        return size;
+                    }
+
+                    @Nonnull
+                    @Override
+                    public Node getNode() {
+                        return label;
+                    }
+                });
+            }
+        } catch (IOException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+}
+```
+
 The `TreeMapPane` has two properties that are set in the constructor that determine how content is rendered, 
 but can also be configured on the fly:
 

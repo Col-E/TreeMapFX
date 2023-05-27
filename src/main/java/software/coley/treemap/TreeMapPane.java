@@ -14,6 +14,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.VPos;
 import javafx.scene.Node;
 import javafx.scene.layout.Pane;
+import software.coley.treemap.content.TreeContent;
 import software.coley.treemap.squaring.Rectangle;
 import software.coley.treemap.squaring.Squarify;
 
@@ -76,6 +77,19 @@ public class TreeMapPane<T> extends Pane {
 
 		// Disabled to prevent pixel snapping flickering.
 		setSnapToPixel(false);
+	}
+
+	/**
+	 * Creates a new tree-map pane modeling some {@link TreeContent} data type.
+	 *
+	 * @param <C>
+	 * 		Tree content implementation type.
+	 *
+	 * @return New tree-map pane for {@link TreeContent} data.
+	 */
+	@Nonnull
+	public static <C extends TreeContent> TreeMapPane<C> forTreeContent() {
+		return new TreeMapPane<>(TreeContent::getValueWeight, TreeContent::getNode);
 	}
 
 	/**
