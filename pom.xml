@@ -6,7 +6,7 @@
 
     <groupId>software.coley</groupId>
     <artifactId>treemap-fx</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
 
     <name>TreeMapFX</name>
     <description>A simple TreeMap chart control for JavaFX</description>
