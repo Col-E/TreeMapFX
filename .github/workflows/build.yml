@@ -43,7 +43,7 @@ jobs:
         run: ./mvnw test
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Test artifacts
           retention-days: 21
@@ -62,14 +62,15 @@ jobs:
       pull-requests: write
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
           check_name: Unit Test results
-          files: artifacts/unit-test-*/**/*.xml
+          files: |
+            **/TEST-*
 
   # Builds the projects and attempts to publish a release if the current project version
   # does not match any existing tags in the repository.
@@ -139,7 +140,7 @@ jobs:
           JRELEASER_NEXUS2_PASSWORD: ${{ secrets.JRELEASER_DEPLOY_MAVEN_NEXUS2_PASSWORD }}
       # Upload JRelease debug log
       - name: JReleaser output
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: jreleaser-release
